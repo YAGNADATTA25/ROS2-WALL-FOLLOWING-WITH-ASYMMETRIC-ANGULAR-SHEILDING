@@ -1,35 +1,63 @@
-# ROS 2 Left-Flank Wall Follower with Angular Shielding
+# ROS 2 Wall Following Package (`wall_following_project`)
 
-An autonomous navigation package developed in **ROS 2 Humble** for a TurtleBot3 mobile robot. The system utilizes real-time 360° LiDAR data to map sensory windows, execute robust left-wall tracking, and dodge standalone obstacles using a unique asymmetric angular shielding technique.
-
-## 🚀 Key Engineering Highlights
-* **Asymmetric Angular Shielding:** Bypasses the classic wall-following failure mode where a tracked wall bleeds into the front obstacle zone. By shifting the front window to $[335^\circ, 10^\circ]$, the robot completely blinds its front-left quadrant to the wall while remaining 100% reactive to dynamic threats ahead.
-* **Deterministic Decision Arbitration:** Replaces unstable controller loops with a high-frequency, tiered state machine that prioritizes safety deceleration over tracking maneuvers.
-* **Telemetry Monitoring Layer:** Pipes live operational modes directly to the console (`[TRUE OBSTACLE AHEAD]`, `[TRACKING_PERFECTLY]`) for real-time tracking performance auditing.
+A high-speed autonomous navigation package implemented within the ROS 2 Humble framework. This package utilizes a custom-engineered asymmetric LiDAR angular filtering model paired with a proportional feedback steering loop to achieve stable corridor traversal and wall-hugging for a differential drive mobile robot without grazing sharp corners or sidewall irregularities.
 
 ---
 
-## 📊 System Architecture & Sensory Windows
+## Technical Approach & Control Architecture
 
-The system splits incoming `sensor_msgs/msg/LaserScan` arrays into two decoupled, high-precision observation sectors:
+The reactive control logic executes continuously across two main subsystems to calculate stable velocity commands:
+
+*   **Asymmetric Angular Shielding:** Instead of processing a heavy symmetric $360^\circ$ laser rangefinder array, the parser slices the incoming `sensor_msgs/msg/LaserScan` topic into isolated tracking sectors. An aggressive filtering window isolates the front-to-sidewall profile (Front Collision Shield: $-15^\circ$ to $+45^\circ$, Lateral Wall Tracker: $+45^\circ$ to $+115^\circ$). Sidelining environmental noise prevents false steering reactions caused by open spaces or sharp wall cutouts.
+*   **Proportional Steering Controller:** The node derives the immediate lateral error distance ($e_{\text{dist}}$) between the geometric center of the robot and the targeted wall contour line:
+
+$$e_{\text{dist}} = d_{\text{wall\_target}} - \min(\text{Scan}_{\text{lateral}})$$
+
+   Steering adjustments are regulated dynamically through an optimized proportional feedback loop designed to mitigate high-frequency chassis oscillations:
+
+$$\omega = K_p \cdot e_{\text{dist}}$$
+
+---
+
+## Repository Directory Structure
 
 ```text
-               [0° / 360°] Front
-                   |
-     [335°] .------|------. [10°]
-           /       |       \
-          /  ZONE A: FRONT  \
-         /   OBSTACLE ZONE   \
-        |                     |
- [40°]  |                     |
-   \    |                     |
-    \   |                     |
-  ZONE B:                     |
-  LEFT WALL                   |
-  TRACKING                    |
-        |                     |
-        |                     |
-                   |
-                 [180°]
+wall_following_project/
+├── CMakeLists.txt             # Colcon compilation properties
+├── package.xml                # ROS 2 rclcpp, sensor_msgs, and geometry_msgs dependencies
+├── README.md                  # System technical documentation
+├── config/
+│   └── wall_follower_params.yaml  # Tuned Kp steering gains and distance safety margins
+├── launch/
+│   └── wall_follow.launch.py  # Launches the tracker node and syncs runtime parameters
+└── src/
+    └── wall_follower_node.cpp # High-rate LaserScan parsing and steering command logic
 
-𝔐 Decision Arbitration LogicData Sanitization: Out-of-bounds metrics, infinite metrics, and robot frame self-reflections ($d \le 0.32\text{m}$) are flattened to $3.5\text{m}$ to prevent erroneous state jumps.Zone A evaluation (Obstacle Override):$$d_{\text{front}} = \min\left(\text{ranges}[0^\circ \to 10^\circ], \text{ranges}[335^\circ \to 360^\circ]\right)$$If $d_{\text{front}} < 0.50\text{m} \implies$ State: AVOIDING_OBSTACLE ($v_x = 0.02\text{m/s}, \omega_z = -0.70\text{rad/s}$).Zone B evaluation (Wall Tracking):$$d_{\text{left}} = \min\left(\text{ranges}[10^\circ \to 40^\circ]\right)$$If $d_{\text{left}} > 1.10\text{m} \implies$ State: AVOIDING_OBSTACLE (Drifting away; correct left).If $d_{\text{left}} < 0.90\text{m} \implies$ State: ADJUSTING_RIGHT (Too close; bank right).Else $\implies$ State: TRACKING_PERFECTLY ($v_x = 0.18\text{m/s}, \omega_z = 0.0\text{rad/s}$).
+Installation & Build Setup
+
+Ensure your local system operates with ROS 2 Humble and your workspace environment is correctly configured. Clone this package directory straight into your src folder, resolve its dependencies via rosdep, and compile:
+Bash
+
+cd ~/turtlebot3_ws
+rosdep update
+rosdep install --from-paths src --ignore-src -r -y --rosdistro humble
+
+colcon build --packages-select wall_following_project
+source install/setup.bash
+
+Execution Guidelines
+1. Launch the Environment Simulation
+
+Set your platform model environment variable and launch the tracking setup pipeline to spin up the Gazebo maze/corridor scene:
+Bash
+
+export TURTLEBOT3_MODEL=waffle_pi
+ros2 launch wall_following_project wall_follow.launch.py
+
+2. Trigger the Wall Follower Control Loop
+
+In a secondary terminal window, activate the compiled C++ controller node to instantly begin high-frequency wall tracking and automated guidance:
+Bash
+
+source ~/turtlebot3_ws/install/setup.bash
+ros2 run wall_following_project wall_follower_node
