@@ -8,14 +8,9 @@ A high-speed autonomous navigation package implemented within the ROS 2 Humble f
 
 The reactive control logic executes continuously across two main subsystems to calculate stable velocity commands:
 
-*   **Asymmetric Angular Shielding:** Instead of processing a heavy symmetric $360^\circ$ laser rangefinder array, the parser slices the incoming `sensor_msgs/msg/LaserScan` topic into isolated tracking sectors. An aggressive filtering window isolates the front-to-sidewall profile (Front Collision Shield: $-15^\circ$ to $+45^\circ$, Lateral Wall Tracker: $+45^\circ$ to $+115^\circ$). Sidelining environmental noise prevents false steering reactions caused by open spaces or sharp wall cutouts.
-*   **Proportional Steering Controller:** The node derives the immediate lateral error distance ($e_{\text{dist}}$) between the geometric center of the robot and the targeted wall contour line:
-
-$$e_{\text{dist}} = d_{\text{wall\_target}} - \min(\text{Scan}_{\text{lateral}})$$
-
-   Steering adjustments are regulated dynamically through an optimized proportional feedback loop designed to mitigate high-frequency chassis oscillations:
-
-$$\omega = K_p \cdot e_{\text{dist}}$$
+*   **Asymmetric Angular Shielding:** Instead of processing a heavy symmetric 360^\circ laser rangefinder array, the parser slices the incoming `sensor_msgs/msg/LaserScan` topic into isolated tracking sectors. An aggressive filtering window isolates the front-to-sidewall profile . Sidelining environmental noise prevents false steering reactions caused by open spaces or sharp wall cutouts.
+*   **Proportional Steering Controller:** The node derives the immediate lateral error distance ($e_{\text{dist}}$) between the geometric center of the robot and the targeted wall contour line.
+*    streering adjustments are regulated dynamically through an optimized proportional feedback loop designed to mitigate high-frequency chassis oscillations.
 
 ---
 
