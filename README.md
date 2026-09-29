@@ -1,58 +1,122 @@
-# ROS 2 Wall Following Package (`wall_following_project`)
 
-A high-speed autonomous navigation package implemented within the ROS 2 Humble framework. This package utilizes a custom-engineered asymmetric LiDAR angular filtering model paired with a proportional feedback steering loop to achieve stable corridor traversal and wall-hugging for a differential drive mobile robot without grazing sharp corners or sidewall irregularities.
+### `ROS2-WALL-FOLLOWING-WITH-ASYMMETRIC-ANGULAR-SHEILDING`
+
+```markdown
+# ROS 2 Wall-Following Navigation: Asymmetric Angular Shielding & Reactive Control
+
+![ROS 2 Humble](https://img.shields.io/badge/ROS_2-Humble-blue.svg)
+![C++17](https://img.shields.io/badge/Language-C%2B%2B17-green.svg)
+![Python 3.10](https://img.shields.io/badge/Language-Python_3.10-yellow.svg)
+![Gazebo Simulator](https://img.shields.io/badge/Simulator-Gazebo_Classic-orange.svg)
+![License](https://img.shields.io/badge/License-Apache_2.0-red.svg)
+
+A high-performance ROS 2 reactive navigation architecture engineered for mobile robots navigating structured corridor and wall environments[cite: 1]. The system decouples raw 2D LiDAR range processing into asymmetric angular safety sectors, enabling smooth wall alignment, proactive cornering, and instantaneous emergency obstacle clearance without reliance on high-level navigation costmaps[cite: 1].
+
+```
 
 ---
 
-## Technical Approach & Control Architecture
+## 🏗 System Architecture & Closed-Loop Control Flow
 
-The reactive control logic executes continuously across two main subsystems to calculate stable velocity commands:
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                     Target Platform / Gazebo Sim                        │
+│             (TurtleBot3 Waffle Pi / Differential Drive Base)            │
+└────────────────────────────────────┬────────────────────────────────────┘
+                                     │ Topic: /scan (sensor_msgs/msg/LaserScan)
+┌────────────────────────────────────▼────────────────────────────────────┐
+│                    LiDAR Perception & Polar Processing                  │
+│  ┌───────────────────────────────────────────────────────────────────┐  │
+│  │ 2D LaserScan Range Filter (Inf/NaN Filtering + Outlier Rejection)│  │
+│  │ Asymmetric Angular Ray Partitioning:                              │  │
+│  │   ├─ Front Critical Zone (-15° to +15°)                           │  │
+│  │   ├─ Front-Left / Front-Right Asymmetric Shield Sectors         │  │
+│  │   └─ Lateral Wall Alignment Vector (90° Parallel Offset)          │  │
+│  └─────────────────────────────────┬─────────────────────────────────┘  │
+└────────────────────────────────────┼────────────────────────────────────┘
+                                     │ Filtered Distance & Error Signals
+┌────────────────────────────────────▼────────────────────────────────────┐
+│               Asymmetric Reactive Safety & Controller Node              │
+│  ┌───────────────────────────────────────────────────────────────────┐  │
+│  │ Closed-Loop Distance Error Evaluator: \(e(t) = d_{\text{target}} - d_{\text{measured}}\) │
+│  │ Dynamic Velocity Scaling & Turn Rate Saturation Engine            │  │
+│  │ Asymmetric Shield Safety Override (Emergency Angular Pivot)      │  │
+│  └─────────────────────────────────┬─────────────────────────────────┘  │
+└────────────────────────────────────┼────────────────────────────────────┘
+                                     │ Topic: /cmd_vel (geometry_msgs/msg/Twist)
+┌────────────────────────────────────▼────────────────────────────────────┐
+│                       Robot Hardware / Motor Actuators                  │
+└─────────────────────────────────────────────────────────────────────────┘
 
-*   **Asymmetric Angular Shielding:** Instead of processing a heavy symmetric 360^\circ laser rangefinder array, the parser slices the incoming `sensor_msgs/msg/LaserScan` topic into isolated tracking sectors. An aggressive filtering window isolates the front-to-sidewall profile . Sidelining environmental noise prevents false steering reactions caused by open spaces or sharp wall cutouts.
-*   **Proportional Steering Controller:** The node derives the immediate lateral error distance ($e_{\text{dist}}$) between the geometric center of the robot and the targeted wall contour line.
-*    streering adjustments are regulated dynamically through an optimized proportional feedback loop designed to mitigate high-frequency chassis oscillations.
+```
 
 ---
 
-## Repository Directory Structure
+## 🔑 Key Engineering & R&D Highlights
 
-```text
-wall_following_project/
-├── CMakeLists.txt             # Colcon compilation properties
-├── package.xml                # ROS 2 rclcpp, sensor_msgs, and geometry_msgs dependencies
-├── README.md                  # System technical documentation
-├── config/
-│   └── wall_follower_params.yaml  # Tuned Kp steering gains and distance safety margins
-├── launch/
-│   └── wall_follow.launch.py  # Launches the tracker node and syncs runtime parameters
-└── src/
-    └── wall_follower_node.cpp # High-rate LaserScan parsing and steering command logic
+* **Asymmetric Angular Safety Shielding:** Evaluates non-symmetric LiDAR angular sectors (e.g., front-left vs. front-right clearance) to dynamically bias rotational maneuvers toward safe open space during sharp corridor corners and narrow transitions.
 
-Installation & Build Setup
 
-Ensure your local system operates with ROS 2 Humble and your workspace environment is correctly configured. Clone this package directory straight into your src folder, resolve its dependencies via rosdep, and compile:
-Bash
+* **Low-Latency Perception Pipeline:** Filters raw `sensor_msgs/msg/LaserScan` arrays in real time, handling sensor noise, invalid readings (`inf`/`nan`), and ray-angle index mapping dynamically across varying LiDAR field-of-view (FOV) configurations.
 
-cd ~/turtlebot3_ws
-rosdep update
-rosdep install --from-paths src --ignore-src -r -y --rosdistro humble
 
-colcon build --packages-select wall_following_project
+* **Closed-Loop Wall Distance Regulation:** Implements a feedback controller that continuously calculates lateral cross-track distance errors and heading angles relative to parallel wall surfaces, driving cross-track error to zero.
+
+
+* **Dynamic Velocity Scaling:** Automatically reduces linear speed $v_x$ as heading error or lateral deviation increases, preventing overshoot and mechanical instability during aggressive turn corrections.
+
+
+* **Emergency Reactive Recovery Loop:** Intercepts standard wall-following commands to execute rapid in-place rotation or obstacle avoidance when objects enter the immediate front safety envelope.
+
+
+
+---
+
+## 📊 Technical Parameters & Control Matrix
+
+| Control Parameter / Metric | Value | Description |
+| --- | --- | --- |
+| **ROS 2 Middleware** | Humble Hawksbill | Target LTS Framework |
+| **Target Wall Distance ($d_{\text{target}}$)** | `0.5 m` (Configurable) | Desired lateral clearance offset |
+| **Front Safety Envelope** | `0.4 m` Threshold | Immediate collision avoidance trigger |
+| **Control Loop Frequency** | 20 Hz (50 ms cycle) | Low-latency reactive control loop |
+| **Asymmetric Shield Angles** | Custom FOV Partitions | Angle-weighted sector ray filtering |
+| **Execution Nodes** | `rclcpp` / `rclpy` | C++ / Python ROS 2 Node Architecture |
+
+---
+
+## 💻 Tech Stack & Interfaces
+
+* **Middleware:** ROS 2 Humble Hawksbill
+* **Programming Languages:** C++17, Python 3.10
+* **ROS 2 Interface Types:** `sensor_msgs/msg/LaserScan`, `geometry_msgs/msg/Twist`, `nav_msgs/msg/Odometry`
+* **Simulation Target:** Gazebo Classic 11 / TurtleBot3 Waffle Pi
+
+---
+
+## 🚀 Build & Execution Guide
+
+### Prerequisites
+
+Ensure ROS 2 Humble and Gazebo Classic are installed on Ubuntu 22.04 LTS.
+
+```bash
+# 1. Clone the repository into your ROS 2 workspace
+cd ~/ros2_ws/src
+git clone [https://github.com/YAGNADATTA25/ROS2-WALL-FOLLOWING-WITH-ASYMMETRIC-ANGULAR-SHEILDING.git](https://github.com/YAGNADATTA25/ROS2-WALL-FOLLOWING-WITH-ASYMMETRIC-ANGULAR-SHEILDING.git)
+
+# 2. Install workspace dependencies
+cd ~/ros2_ws
+rosdep install --from-paths src --ignore-src -r -y
+
+# 3. Build and source workspace
+colcon build --symlink-install --packages-select wall_following
 source install/setup.bash
 
-Execution Guidelines
-1. Launch the Environment Simulation
+# 4. Launch Simulation Environment & Wall Follower Node
+ros2 launch wall_following wall_following.launch.py
 
-Set your platform model environment variable and launch the tracking setup pipeline to spin up the Gazebo maze/corridor scene:
-Bash
+```
 
-export TURTLEBOT3_MODEL=waffle_pi
-ros2 launch wall_following_project wall_follow.launch.py
+---
 
-2. Trigger the Wall Follower Control Loop
-
-In a secondary terminal window, activate the compiled C++ controller node to instantly begin high-frequency wall tracking and automated guidance:
-Bash
-
-source ~/turtlebot3_ws/install/setup.bash
-ros2 run wall_following_project wall_follower_node
